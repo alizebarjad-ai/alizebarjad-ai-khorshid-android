@@ -1,8 +1,9 @@
 package ir.khorshidmafakher.member
 
 import android.content.Context
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Cookie
@@ -15,29 +16,70 @@ import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.security.KeyStore
 import java.util.concurrent.TimeUnit
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+
+private class SessionCookieVault(context: Context) {
+    private val prefs = context.getSharedPreferences("portal_session_vault", Context.MODE_PRIVATE)
+    private val alias = "khorshid_portal_session_aes"
+
+    private fun key(): SecretKey {
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (store.getKey(alias, null) as? SecretKey)?.let { return it }
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        generator.init(KeyGenParameterSpec.Builder(
+            alias,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+        ).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setRandomizedEncryptionRequired(true)
+            .build())
+        return generator.generateKey()
+    }
+
+    fun save(value: String) {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key())
+        val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+        val packed = cipher.iv + encrypted
+        prefs.edit().putString("cookie", Base64.encodeToString(packed, Base64.NO_WRAP)).apply()
+    }
+
+    fun read(): String? {
+        val encoded = prefs.getString("cookie", null) ?: return null
+        return try {
+            val packed = Base64.decode(encoded, Base64.NO_WRAP)
+            require(packed.size > 12)
+            val iv = packed.copyOfRange(0, 12)
+            val ciphertext = packed.copyOfRange(12, packed.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
+            String(cipher.doFinal(ciphertext), Charsets.UTF_8)
+        } catch (_: Exception) {
+            clear()
+            null
+        }
+    }
+
+    fun clear() { prefs.edit().remove("cookie").apply() }
+}
 
 class PortalApi(context: Context) {
     private val base = "https://portal.khorshid-mafakher.ir"
-    private val prefs by lazy {
-        val key = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
-        EncryptedSharedPreferences.create(
-            context, "portal_session", key,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-    }
+    private val vault = SessionCookieVault(context.applicationContext)
     private val cookieJar = object : CookieJar {
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            cookies.firstOrNull { it.name == "khorshid_session" }?.let {
-                prefs.edit().putString("session_cookie", it.toString()).apply()
-            }
+            cookies.firstOrNull { it.name == "khorshid_session" }?.let { vault.save(it.toString()) }
         }
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
-            val raw = prefs.getString("session_cookie", null) ?: return emptyList()
+            val raw = vault.read() ?: return emptyList()
             val cookie = runCatching { Cookie.parse(url, raw) }.getOrNull() ?: return emptyList()
             if (cookie.expiresAt <= System.currentTimeMillis()) {
-                prefs.edit().remove("session_cookie").apply()
+                vault.clear()
                 return emptyList()
             }
             return listOf(cookie)
@@ -130,7 +172,7 @@ class PortalApi(context: Context) {
             client.newCall(Request.Builder().url("$base/api/auth/logout").post(body).build())
                 .execute().close()
         } finally {
-            prefs.edit().remove("session_cookie").apply()
+            vault.clear()
         }
     }
 
