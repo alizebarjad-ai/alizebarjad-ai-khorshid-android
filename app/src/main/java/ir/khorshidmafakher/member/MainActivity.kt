@@ -52,6 +52,7 @@ private enum class MemberTab(val label: String) {
     HOME("خانه"), NOTICES("اطلاعیه‌ها"), MESSAGES("پیام‌ها"), PROJECTS("پروژه‌ها"), PROFILE("پروفایل")
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MemberApp(api: PortalApi) {
     var authenticated by remember { mutableStateOf(false) }
