@@ -256,7 +256,7 @@ private fun NoticesScreen(data: JSONObject, api: PortalApi, onChanged: () -> Uni
                     Text(notification.optString("title"), style = MaterialTheme.typography.titleMedium)
                     Text(notification.optString("body"))
                     val id = notification.optString("id")
-                    if (id.isNotBlank() && !notification.optBoolean("read")) {
+                    if (id.isNotBlank() && notification.isNull("readAt")) {
                         TextButton(enabled = busyId != id, onClick = {
                             scope.launch {
                                 busyId = id
@@ -480,7 +480,7 @@ private fun ProfileScreen(data: JSONObject) {
         if (clubs.length() == 0) item { EmptyCard("عضویت باشگاهی ثبت نشده است.") }
         else items(clubs.takeObjects(), key = { it.toString() }) { club ->
             Card(Modifier.fillMaxWidth()) {
-                Text(club.optString("name").ifBlank { club.optString("clubName") }.ifBlank { club.toString() },
+                Text(club.optJSONObject("club")?.optString("name").orEmpty().ifBlank { club.optString("name") }.ifBlank { club.toString() },
                     Modifier.padding(12.dp))
             }
         }
