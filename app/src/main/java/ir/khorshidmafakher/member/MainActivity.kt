@@ -296,7 +296,7 @@ private fun NotificationCard(item: JSONObject) {
 }
 
 @Composable
-private fun MessagesScreen(items: JSONArray, api: PortalApi, onChanged: () -> Unit) {
+private fun MessagesScreen(conversationItems: JSONArray, api: PortalApi, onChanged: () -> Unit) {
     var showNew by remember { mutableStateOf(false) }
     var expandedId by remember { mutableStateOf("") }
     var recipient by remember { mutableStateOf("MEMBERS_DEPUTY") }
@@ -343,8 +343,8 @@ private fun MessagesScreen(items: JSONArray, api: PortalApi, onChanged: () -> Un
             }
         }
         feedback?.let { message -> item { Text(message, color = Navy) } }
-        if (items.length() == 0) item { EmptyCard("هنوز مکاتبه‌ای ثبت نکرده‌اید.") }
-        items(items.takeObjects(), key = { it.optString("id") }) { conversation ->
+        if (conversationItems.length() == 0) item { EmptyCard("هنوز مکاتبه‌ای ثبت نکرده‌اید.") }
+        items(conversationItems.takeObjects(), key = { it.optString("id") }) { conversation ->
             val id = conversation.optString("id")
             val messages = conversation.optJSONArray("messages") ?: JSONArray()
             Card(Modifier.fillMaxWidth()) {
@@ -382,7 +382,7 @@ private fun MessagesScreen(items: JSONArray, api: PortalApi, onChanged: () -> Un
 }
 
 @Composable
-private fun ProjectsScreen(items: JSONArray, api: PortalApi, onChanged: () -> Unit) {
+private fun ProjectsScreen(projectItems: JSONArray, api: PortalApi, onChanged: () -> Unit) {
     var showForm by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
     var objective by remember { mutableStateOf("") }
@@ -437,8 +437,8 @@ private fun ProjectsScreen(items: JSONArray, api: PortalApi, onChanged: () -> Un
             }
         }
         feedback?.let { item { Text(it, color = Navy) } }
-        if (items.length() == 0) item { EmptyCard("هنوز پیشنهادی ثبت نکرده‌اید.") }
-        items(items.takeObjects(), key = { it.optString("id") }) { project ->
+        if (projectItems.length() == 0) item { EmptyCard("هنوز پیشنهادی ثبت نکرده‌اید.") }
+        items(projectItems.takeObjects(), key = { it.optString("id") }) { project ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(project.optString("title"), style = MaterialTheme.typography.titleMedium, color = Navy)
