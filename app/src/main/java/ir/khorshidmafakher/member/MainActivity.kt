@@ -198,6 +198,8 @@ private fun LoginScreen(api: PortalApi, onSuccess: () -> Unit) {
 private fun DashboardScreen(data: JSONObject, notices: JSONArray, messageCount: Int, projectCount: Int, onRefresh: () -> Unit) {
     val member = data.optJSONObject("member") ?: JSONObject()
     val notifications = data.optJSONArray("notifications") ?: JSONArray()
+    val advertisements = data.optJSONArray("advertisements") ?: JSONArray()
+    val programs = data.optJSONArray("programs") ?: JSONArray()
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(vertical = 16.dp)) {
         item {
@@ -233,6 +235,43 @@ private fun DashboardScreen(data: JSONObject, notices: JSONArray, messageCount: 
         item { Text("اعلان‌های شخصی", style = MaterialTheme.typography.titleLarge, color = Navy) }
         if (notifications.length() == 0) item { EmptyCard("اعلان جدیدی ندارید.") }
         else items(notifications.takeObjects(3), key = { it.optString("id") }) { NotificationCard(it) }
+
+        item { Text("فرصت‌ها و آگهی‌ها", style = MaterialTheme.typography.titleLarge, color = Navy) }
+        if (advertisements.length() == 0) item { EmptyCard("در حال حاضر فرصت یا آگهی فعالی ثبت نشده است.") }
+        else items(advertisements.takeObjects(4), key = { it.optString("id").ifBlank { it.optString("title") } }) {
+            DashboardContentCard(it, "فرصت یا آگهی")
+        }
+
+        item { Text("برنامه‌ها و رویدادها", style = MaterialTheme.typography.titleLarge, color = Navy) }
+        if (programs.length() == 0) item { EmptyCard("برنامه یا رویداد قابل نمایشی وجود ندارد.") }
+        else items(programs.takeObjects(4), key = { it.optString("id").ifBlank { it.optString("title") } }) {
+            DashboardContentCard(it, "برنامه یا رویداد")
+        }
+    }
+}
+
+@Composable
+private fun DashboardContentCard(item: JSONObject, fallbackTitle: String) {
+    val title = item.optString("title")
+        .ifBlank { item.optString("name") }
+        .ifBlank { item.optString("subject") }
+        .ifBlank { fallbackTitle }
+    val description = item.optString("summary")
+        .ifBlank { item.optString("description") }
+        .ifBlank { item.optString("body") }
+        .ifBlank { item.optString("content") }
+    val date = item.optString("startsAt")
+        .ifBlank { item.optString("eventDate") }
+        .ifBlank { item.optString("publishedAt") }
+        .ifBlank { item.optString("createdAt") }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Navy)
+            if (description.isNotBlank()) Text(description)
+            if (date.isNotBlank()) Text(date, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            val status = item.optString("status")
+            if (status.isNotBlank()) Text("وضعیت: $status", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        }
     }
 }
 
