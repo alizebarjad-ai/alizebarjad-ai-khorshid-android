@@ -129,6 +129,8 @@ class PortalApi(context: Context) {
     }
 
     suspend fun dashboard() = execute(Request.Builder().url("$base/api/workspace/member").get().build())
+    suspend fun publicNotices(): JSONArray =
+        execute(Request.Builder().url("$base/api/public/notices").get().build()).optJSONArray("notices") ?: JSONArray()
     suspend fun conversations(): JSONArray =
         execute(Request.Builder().url("$base/api/workspace/member?summary=conversations").get().build())
             .optJSONArray("conversations") ?: JSONArray()
