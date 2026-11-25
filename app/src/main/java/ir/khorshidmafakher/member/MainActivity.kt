@@ -264,11 +264,25 @@ private fun DashboardContentCard(item: JSONObject, fallbackTitle: String) {
         .ifBlank { item.optString("eventDate") }
         .ifBlank { item.optString("publishedAt") }
         .ifBlank { item.optString("createdAt") }
-    Card(Modifier.fillMaxWidth()) {
+    val endDate = item.optString("endsAt")
+    val clubName = item.optJSONObject("club")?.optString("name").orEmpty()
+    val destination = item.optString("destinationUrl")
+    val context = LocalContext.current
+    val clickableModifier = if (destination.startsWith("https://", ignoreCase = true)) {
+        Modifier.fillMaxWidth().clickable {
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(destination))) }
+        }
+    } else Modifier.fillMaxWidth()
+    Card(clickableModifier) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = Navy)
             if (description.isNotBlank()) Text(description)
-            if (date.isNotBlank()) Text(date, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            if (date.isNotBlank()) Text("شروع / انتشار: $date", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            if (endDate.isNotBlank()) Text("پایان: $endDate", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            if (clubName.isNotBlank()) Text("باشگاه: $clubName", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            if (destination.startsWith("https://", ignoreCase = true)) {
+                Text("مشاهده جزئیات ↗", color = Gold, style = MaterialTheme.typography.labelLarge)
+            }
             val status = item.optString("status")
             if (status.isNotBlank()) Text("وضعیت: $status", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
         }
