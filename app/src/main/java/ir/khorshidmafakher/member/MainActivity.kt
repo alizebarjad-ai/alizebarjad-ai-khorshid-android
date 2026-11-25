@@ -1,6 +1,8 @@
 package ir.khorshidmafakher.member
 
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -23,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -58,6 +61,7 @@ private fun MemberApp(api: PortalApi) {
     var authenticated by remember { mutableStateOf(false) }
     var checking by remember { mutableStateOf(true) }
     var dashboard by remember { mutableStateOf(JSONObject()) }
+    var notices by remember { mutableStateOf(JSONArray()) }
     var conversations by remember { mutableStateOf(JSONArray()) }
     var projects by remember { mutableStateOf(JSONArray()) }
     var busy by remember { mutableStateOf(false) }
@@ -70,6 +74,8 @@ private fun MemberApp(api: PortalApi) {
         error = null
         try {
             dashboard = api.dashboard()
+            val dashboardNotices = dashboard.optJSONArray("notices") ?: JSONArray()
+            notices = runCatching { mergeNotices(dashboardNotices, api.publicNotices()) }.getOrElse { dashboardNotices }
             conversations = api.conversations()
             projects = api.projects()
         } catch (e: Exception) {
@@ -136,9 +142,9 @@ private fun MemberApp(api: PortalApi) {
                 if (busy && dashboard.length() == 0) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 } else when (selectedTab) {
-                    MemberTab.HOME -> DashboardScreen(dashboard, conversations.length(), projects.length(),
+                    MemberTab.HOME -> DashboardScreen(dashboard, notices, conversations.length(), projects.length(),
                         onRefresh = { scope.launch { refreshAll() } })
-                    MemberTab.NOTICES -> NoticesScreen(dashboard, api) { scope.launch { refreshAll() } }
+                    MemberTab.NOTICES -> NoticesScreen(notices, dashboard, api) { scope.launch { refreshAll() } }
                     MemberTab.MESSAGES -> MessagesScreen(conversations, api) { scope.launch { refreshAll() } }
                     MemberTab.PROJECTS -> ProjectsScreen(projects, api) { scope.launch { refreshAll() } }
                     MemberTab.PROFILE -> ProfileScreen(dashboard)
@@ -161,6 +167,7 @@ private fun LoginScreen(api: PortalApi, onSuccess: () -> Unit) {
         Text("خورشید مفاخر", style = MaterialTheme.typography.headlineMedium, color = Navy)
         Spacer(Modifier.height(8.dp))
         Text("ورود به پنل اختصاصی اعضا")
+        NetworkEntryCard()
         Spacer(Modifier.height(28.dp))
         OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth(),
             label = { Text("نام کاربری یا ایمیل") }, singleLine = true)
@@ -185,9 +192,8 @@ private fun LoginScreen(api: PortalApi, onSuccess: () -> Unit) {
 }
 
 @Composable
-private fun DashboardScreen(data: JSONObject, messageCount: Int, projectCount: Int, onRefresh: () -> Unit) {
+private fun DashboardScreen(data: JSONObject, notices: JSONArray, messageCount: Int, projectCount: Int, onRefresh: () -> Unit) {
     val member = data.optJSONObject("member") ?: JSONObject()
-    val notices = data.optJSONArray("notices") ?: JSONArray()
     val notifications = data.optJSONArray("notifications") ?: JSONArray()
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(vertical = 16.dp)) {
@@ -237,8 +243,7 @@ private fun MetricCard(title: String, value: String, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun NoticesScreen(data: JSONObject, api: PortalApi, onChanged: () -> Unit) {
-    val notices = data.optJSONArray("notices") ?: JSONArray()
+private fun NoticesScreen(notices: JSONArray, data: JSONObject, api: PortalApi, onChanged: () -> Unit) {
     val notifications = data.optJSONArray("notifications") ?: JSONArray()
     var busyId by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
@@ -501,6 +506,40 @@ private fun ProfileRow(label: String, value: String) {
 @Composable
 private fun EmptyCard(message: String) {
     Card(Modifier.fillMaxWidth()) { Text(message, Modifier.padding(16.dp), color = Color.Gray) }
+}
+
+@Composable
+private fun NetworkEntryCard() {
+    val context = LocalContext.current
+    Card(
+        Modifier.fillMaxWidth().clickable {
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://network.khorshid-mafakher.ir"))) }
+        },
+        colors = CardDefaults.cardColors(containerColor = Navy)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.weight(1f)) {
+                Text("سامانه پیوند", color = Gold, style = MaterialTheme.typography.titleLarge)
+                Text("ورود به شبکه ارتباطی اعضا، هنرمندان و متخصصان", color = Color.White)
+            }
+            Text("ورود  ↗", color = Gold, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+private fun mergeNotices(primary: JSONArray, secondary: JSONArray): JSONArray {
+    val merged = LinkedHashMap<String, JSONObject>()
+    for (source in listOf(primary, secondary)) {
+        for (index in 0 until source.length()) {
+            val item = source.optJSONObject(index) ?: continue
+            val key = item.optString("id").ifBlank {
+                item.optString("title") + "|" + item.optString("createdAt") + "|" + item.optString("publishAt")
+            }
+            if (key.isNotBlank()) merged[key] = item
+        }
+    }
+    return JSONArray(merged.values.toList())
 }
 
 private fun JSONArray.takeObjects(limit: Int = length()): List<JSONObject> =
