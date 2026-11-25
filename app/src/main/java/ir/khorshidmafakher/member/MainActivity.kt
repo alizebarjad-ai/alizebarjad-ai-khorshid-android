@@ -7,6 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -162,11 +164,12 @@ private fun LoginScreen(api: PortalApi, onSuccess: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center,
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally) {
         Text("خورشید مفاخر", style = MaterialTheme.typography.headlineMedium, color = Navy)
         Spacer(Modifier.height(8.dp))
         Text("ورود به پنل اختصاصی اعضا")
+        Spacer(Modifier.height(16.dp))
         NetworkEntryCard()
         Spacer(Modifier.height(28.dp))
         OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth(),
