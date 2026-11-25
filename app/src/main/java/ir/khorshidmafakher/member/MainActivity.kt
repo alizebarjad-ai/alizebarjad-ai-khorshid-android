@@ -203,6 +203,7 @@ private fun DashboardScreen(data: JSONObject, notices: JSONArray, messageCount: 
                 TextButton(onClick = onRefresh) { Text("به‌روزرسانی") }
             }
         }
+        item { NetworkEntryCard() }
         item {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Navy)) {
                 Column(Modifier.padding(20.dp)) {
