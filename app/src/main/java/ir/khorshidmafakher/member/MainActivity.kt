@@ -149,7 +149,7 @@ private fun MemberApp(api: PortalApi) {
                     MemberTab.NOTICES -> NoticesScreen(notices, dashboard, api) { scope.launch { refreshAll() } }
                     MemberTab.MESSAGES -> MessagesScreen(conversations, api) { scope.launch { refreshAll() } }
                     MemberTab.PROJECTS -> ProjectsScreen(projects, api) { scope.launch { refreshAll() } }
-                    MemberTab.PROFILE -> ProfileScreen(dashboard)
+                    MemberTab.PROFILE -> ProfileScreen(api, dashboard) { scope.launch { refreshAll() } }
                 }
             }
         }
@@ -520,9 +520,21 @@ private fun FormField(label: String, value: String, onValue: (String) -> Unit, l
 }
 
 @Composable
-private fun ProfileScreen(data: JSONObject) {
+private fun ProfileScreen(api: PortalApi, data: JSONObject, onChanged: () -> Unit) {
     val member = data.optJSONObject("member") ?: JSONObject()
     val clubs = member.optJSONArray("clubMemberships") ?: JSONArray()
+    val availableClubs = data.optJSONArray("availableClubs") ?: JSONArray()
+    val activeClubIds = clubs.takeObjects()
+        .filter { it.optString("status") == "ACTIVE" }
+        .mapNotNull { item ->
+            item.optString("clubId").ifBlank { item.optJSONObject("club")?.optString("id").orEmpty() }
+                .takeIf { it.isNotBlank() }
+        }.toSet()
+    var joiningClubId by remember { mutableStateOf<String?>(null) }
+    var clubMessage by remember { mutableStateOf<String?>(null) }
+    var clubError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("پرونده عضویت", style = MaterialTheme.typography.headlineSmall, color = Navy) }
         item {
@@ -539,13 +551,63 @@ private fun ProfileScreen(data: JSONObject) {
             }
         }
         item { Text("باشگاه‌های عضو", style = MaterialTheme.typography.titleLarge, color = Navy) }
-        if (clubs.length() == 0) item { EmptyCard("عضویت باشگاهی ثبت نشده است.") }
+        if (clubs.length() == 0) item { EmptyCard("هنوز عضو باشگاهی نیستید.") }
         else items(clubs.takeObjects(), key = { it.toString() }) { club ->
             Card(Modifier.fillMaxWidth()) {
-                Text(club.optJSONObject("club")?.optString("name").orEmpty().ifBlank { club.optString("name") }.ifBlank { club.toString() },
-                    Modifier.padding(12.dp))
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        club.optJSONObject("club")?.optString("name").orEmpty()
+                            .ifBlank { club.optString("name") }.ifBlank { "باشگاه" },
+                        color = Navy,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    club.optJSONObject("club")?.optString("description")?.takeIf { it.isNotBlank() }?.let {
+                        Text(it, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
+        item {
+            Text("باشگاه‌های فعال برای عضویت", style = MaterialTheme.typography.titleLarge, color = Navy)
+            Text("می‌توانید هم‌زمان در چند باشگاه عضو باشید.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        }
+        if (availableClubs.length() == 0) item { EmptyCard("در حال حاضر باشگاه فعالی برای عضویت وجود ندارد.") }
+        else items(availableClubs.takeObjects(), key = { it.optString("id") }) { club ->
+            val clubId = club.optString("id")
+            val isMember = clubId in activeClubIds
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(club.optString("name", "باشگاه"), color = Navy, style = MaterialTheme.typography.titleMedium)
+                    club.optString("description").takeIf { it.isNotBlank() }?.let { Text(it, color = Color.Gray) }
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                joiningClubId = clubId
+                                clubError = null
+                                clubMessage = null
+                                runCatching { api.requestClubMembership(clubId) }
+                                    .onSuccess {
+                                        clubMessage = "عضویت در «${club.optString("name")}» ثبت شد."
+                                        onChanged()
+                                    }
+                                    .onFailure { clubError = it.message ?: "ثبت عضویت ناموفق بود." }
+                                joiningClubId = null
+                            }
+                        },
+                        enabled = clubId.isNotBlank() && !isMember && joiningClubId == null,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        when {
+                            isMember -> Text("عضو هستید")
+                            joiningClubId == clubId -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else -> Text("عضویت در باشگاه")
+                        }
+                    }
+                }
+            }
+        }
+        clubMessage?.let { message -> item { Text(message, color = Color(0xFF2E6B45)) } }
+        clubError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
     }
 }
 
