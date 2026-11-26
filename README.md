@@ -16,7 +16,7 @@
 - [x] درخواست عضویت در باشگاه‌های فعال از داخل اپ
 - [x] نمایش فرصت‌ها و آگهی‌ها در داشبورد عضو
 - [x] نمایش برنامه‌ها و رویدادها در داشبورد عضو
-- [ ] Gradle Wrapper استاندارد (نیازمند افزودن فایل باینری معتبر)
+- [x] Gradle Wrapper استاندارد با Gradle 8.9
 - [x] تعریف فرایند CI برای Build خودکار APK در GitHub Actions
 - [ ] Build واقعی در محیط محلی و تست روی شبیه‌ساز/دستگاه
 - [ ] تست یکپارچگی با حساب آزمایشی و آزمون خطاهای شبکه
@@ -57,8 +57,8 @@ https://portal.khorshid-mafakher.ir
 ```
 یا از ترمینال Gradle:
 ```bash
-gradle --no-daemon testDebugUnitTest
-gradle --no-daemon assembleDebug
+./gradlew testDebugUnitTest
+./gradlew assembleDebug
 ```
 را اجرا کنید. چک‌لیست کامل ساخت و تست در `docs/BUILD-AND-RELEASE-CHECKLIST.md` است.
 
