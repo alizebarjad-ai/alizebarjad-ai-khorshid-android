@@ -53,7 +53,7 @@ https://portal.khorshid-mafakher.ir
 ## ساخت محلی
 در Android Studio پروژه را باز کنید و Gradle Sync را انجام دهید. سپس در PowerShell ریشه پروژه:
 ```powershell
-.\\scripts\\build-debug.ps1
+.\scripts\build-debug.ps1
 ```
 یا از ترمینال Gradle:
 ```bash
