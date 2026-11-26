@@ -35,8 +35,8 @@ app\build\outputs\apk\debug\app-debug.apk
 ## تست‌های خودکار
 
 ```powershell
-gradle --no-daemon testDebugUnitTest
-gradle --no-daemon assembleDebug
+ .\\gradlew.bat testDebugUnitTest
+ .\\gradlew.bat assembleDebug
 ```
 
 یا از پنجره Gradle در Android Studio، taskهای `testDebugUnitTest` و `assembleDebug` را اجرا کنید.
