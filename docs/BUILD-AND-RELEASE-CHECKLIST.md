@@ -14,7 +14,7 @@
 1. Android Studio را باز کنید و مخزن را از GitHub Clone کنید.
 2. Gradle Sync را کامل کنید.
 3. در صورت درخواست، Android SDK Platform 35 و Build Tools 35.0.0 را نصب کنید.
-4. مطمئن شوید Gradle 8.9 و JDK 17 در دسترس هستند.
+4. مطمئن شوید JDK 17 در دسترس است؛ Gradle 8.9 از طریق Wrapper دانلود می‌شود.
 
 ## ساخت APK
 
@@ -35,8 +35,8 @@ app\build\outputs\apk\debug\app-debug.apk
 ## تست‌های خودکار
 
 ```powershell
- .\\gradlew.bat testDebugUnitTest
- .\\gradlew.bat assembleDebug
+ .\gradlew.bat testDebugUnitTest
+ .\gradlew.bat assembleDebug
 ```
 
 یا از پنجره Gradle در Android Studio، taskهای `testDebugUnitTest` و `assembleDebug` را اجرا کنید.
