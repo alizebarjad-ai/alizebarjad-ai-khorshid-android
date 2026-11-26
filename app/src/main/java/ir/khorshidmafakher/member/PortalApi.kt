@@ -149,6 +149,11 @@ class PortalApi(context: Context) {
             .put("conversationId", conversationId).put("body", body)
     )
 
+    suspend fun requestClubMembership(clubId: String) = post(
+        "$base/api/workspace/member",
+        JSONObject().put("action", "REQUEST_CLUB_MEMBERSHIP").put("clubId", clubId)
+    )
+
     suspend fun markNotificationRead(id: String) = post(
         "$base/api/workspace/member",
         JSONObject().put("action", "MARK_NOTIFICATION_READ").put("id", id)
