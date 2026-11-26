@@ -647,7 +647,7 @@ private fun NetworkEntryCard() {
     }
 }
 
-private fun mergeNotices(primary: JSONArray, secondary: JSONArray): JSONArray {
+internal fun mergeNotices(primary: JSONArray, secondary: JSONArray): JSONArray {
     val merged = LinkedHashMap<String, JSONObject>()
     for (source in listOf(primary, secondary)) {
         for (index in 0 until source.length()) {
