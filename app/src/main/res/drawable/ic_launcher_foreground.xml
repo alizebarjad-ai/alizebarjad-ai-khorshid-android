@@ -8,7 +8,7 @@
         android:translateX="0"
         android:translateY="0">
         <path
-            android:pathData="M54,32 m-21,0 a21,21 0,1 0,42 0 a21,21 0,1 0,-42 0"
+            android:pathData="M54,54 m-21,0 a21,21 0,1 0,42 0 a21,21 0,1 0,-42 0"
             android:fillColor="@android:color/transparent"
             android:strokeColor="#F2A900"
             android:strokeWidth="4.5"
