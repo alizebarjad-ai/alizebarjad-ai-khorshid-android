@@ -154,6 +154,40 @@ class PortalApi(context: Context) {
         JSONObject().put("action", "REQUEST_CLUB_MEMBERSHIP").put("clubId", clubId)
     )
 
+    suspend fun cancelClubMembership(clubId: String) = post(
+        "$base/api/workspace/member",
+        JSONObject().put("action", "CANCEL_CLUB_MEMBERSHIP").put("clubId", clubId)
+    )
+
+    suspend fun registerProgram(programId: String) = post(
+        "$base/api/workspace/member",
+        JSONObject().put("action", "REGISTER_PROGRAM").put("programId", programId)
+    )
+
+    suspend fun cancelProgramRegistration(programId: String) = post(
+        "$base/api/workspace/member",
+        JSONObject().put("action", "CANCEL_PROGRAM_REGISTRATION").put("programId", programId)
+    )
+
+    suspend fun expressProgramInterest(programId: String, note: String = "") = post(
+        "$base/api/member/growth",
+        JSONObject().put("action", "EXPRESS_PROGRAM_INTEREST").put("programId", programId).put("note", note)
+    )
+
+    suspend fun withdrawProgramInterest(programId: String) = post(
+        "$base/api/member/growth",
+        JSONObject().put("action", "WITHDRAW_PROGRAM_INTEREST").put("programId", programId)
+    )
+
+    suspend fun memberGrowth(): JSONObject = execute(
+        Request.Builder().url("$base/api/member/growth").get().build()
+    )
+
+    suspend fun requestMembershipExit() = post(
+        "$base/api/workspace/member",
+        JSONObject().put("action", "REQUEST_MEMBERSHIP_EXIT")
+    )
+
     suspend fun markNotificationRead(id: String) = post(
         "$base/api/workspace/member",
         JSONObject().put("action", "MARK_NOTIFICATION_READ").put("id", id)
@@ -190,6 +224,15 @@ class PortalApi(context: Context) {
         "CONVERSATION_CLOSED" -> "این مکاتبه بسته شده و امکان پاسخ ندارد."
         "ALREADY_A_MEMBER" -> "عضویت شما در این باشگاه قبلاً ثبت شده است."
         "ACTIVE_CLUB_NOT_FOUND" -> "این باشگاه دیگر فعال نیست یا در دسترس قرار ندارد."
+        "EXIT_REQUEST_ALREADY_SUBMITTED" -> "در ۳۰ روز گذشته درخواست خروج ثبت کرده‌اید؛ درخواست تکراری پذیرفته نمی‌شود."
+        "MEMBERS_DEPUTY_UNAVAILABLE" -> "در حال حاضر معاونت اعضا برای دریافت درخواست در دسترس نیست."
+        "PROGRAM_NOT_AVAILABLE" -> "این برنامه دیگر منتشرشده یا قابل ثبت‌نام نیست."
+        "ALREADY_REGISTERED" -> "ثبت‌نام شما قبلاً انجام شده است."
+        "REGISTRATION_NOT_FOUND" -> "ثبت‌نام فعالی برای لغو پیدا نشد."
+        "EXTERNAL_REGISTRATION_REQUIRED" -> "ثبت‌نام این برنامه باید از طریق پیوند برگزارکننده انجام شود."
+        "NOT_A_MEMBER" -> "عضویت فعال شما در این باشگاه پیدا نشد."
+        "MEMBER_ONLY" -> "این قابلیت فقط برای حساب عضو فعال در دسترس است."
+        "ACCOUNT_INACTIVE" -> "حساب کاربری شما غیرفعال است."
         "MEMBER_NOT_FOUND" -> "پرونده عضویت فعال شما در سامانه پیدا نشد."
         "VALIDATION_FAILED", "INVALID_REQUEST" -> "اطلاعات واردشده معتبر نیست."
         "PROJECTS_UNAVAILABLE", "WORKSPACE_UNAVAILABLE" -> "سامانه موقتاً پاسخ‌گو نیست. کمی بعد تلاش کنید."
