@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material3.*
@@ -54,7 +55,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class MemberTab(val label: String) {
-    HOME("خانه"), NOTICES("اطلاعیه‌ها"), MESSAGES("پیام‌ها"), PROJECTS("پروژه‌ها"), PROFILE("پروفایل")
+    HOME("خانه"), NOTICES("اطلاعیه‌ها"), MESSAGES("پیام‌ها"), PROJECTS("پروژه‌ها"), ACTIVITY("فعالیت‌ها"), PROFILE("پروفایل")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,6 +120,7 @@ private fun MemberApp(api: PortalApi) {
                             MemberTab.NOTICES -> Icons.Default.Campaign
                             MemberTab.MESSAGES -> Icons.Default.Chat
                             MemberTab.PROJECTS -> Icons.Default.Lightbulb
+                            MemberTab.ACTIVITY -> Icons.Default.DateRange
                             MemberTab.PROFILE -> Icons.Default.AccountCircle
                         }
                         NavigationBarItem(
@@ -149,6 +151,7 @@ private fun MemberApp(api: PortalApi) {
                     MemberTab.NOTICES -> NoticesScreen(notices, dashboard, api) { scope.launch { refreshAll() } }
                     MemberTab.MESSAGES -> MessagesScreen(conversations, api) { scope.launch { refreshAll() } }
                     MemberTab.PROJECTS -> ProjectsScreen(projects, api) { scope.launch { refreshAll() } }
+                    MemberTab.ACTIVITY -> MemberActivityScreen(api) { scope.launch { refreshAll() } }
                     MemberTab.PROFILE -> ProfileScreen(api, dashboard) { scope.launch { refreshAll() } }
                 }
             }
@@ -520,94 +523,329 @@ private fun FormField(label: String, value: String, onValue: (String) -> Unit, l
 }
 
 @Composable
-private fun ProfileScreen(api: PortalApi, data: JSONObject, onChanged: () -> Unit) {
-    val member = data.optJSONObject("member") ?: JSONObject()
-    val clubs = member.optJSONArray("clubMemberships") ?: JSONArray()
-    val availableClubs = data.optJSONArray("availableClubs") ?: JSONArray()
-    val activeClubIds = clubs.takeObjects()
-        .filter { it.optString("status") == "ACTIVE" }
-        .mapNotNull { item ->
-            item.optString("clubId").ifBlank { item.optJSONObject("club")?.optString("id").orEmpty() }
-                .takeIf { it.isNotBlank() }
-        }.toSet()
-    var joiningClubId by remember { mutableStateOf<String?>(null) }
-    var clubMessage by remember { mutableStateOf<String?>(null) }
-    var clubError by remember { mutableStateOf<String?>(null) }
+private fun MemberActivityScreen(api: PortalApi, onChanged: () -> Unit) {
+    var data by remember { mutableStateOf(JSONObject()) }
+    var loading by remember { mutableStateOf(true) }
+    var busyProgramId by remember { mutableStateOf("") }
+    var feedback by remember { mutableStateOf<String?>(null) }
+    var failure by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("پرونده عضویت", style = MaterialTheme.typography.headlineSmall, color = Navy) }
+    val context = LocalContext.current
+    suspend fun refresh() {
+        loading = true
+        failure = null
+        runCatching { api.memberGrowth() }
+            .onSuccess { data = it }
+            .onFailure { failure = it.message ?: "دریافت سوابق فعالیت ناموفق بود." }
+        loading = false
+    }
+    LaunchedEffect(Unit) { refresh() }
+    val programs = data.optJSONArray("programs") ?: JSONArray()
+    val registrations = data.optJSONArray("registrations") ?: JSONArray()
+    val interests = data.optJSONArray("interests") ?: JSONArray()
+    val activities = data.optJSONArray("activities") ?: JSONArray()
+    val pointsHistory = data.optJSONArray("pointsHistory") ?: JSONArray()
+    val member = data.optJSONObject("member") ?: JSONObject()
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ProfileRow("نام و نام خانوادگی", member.optString("fullName"))
-                    ProfileRow("نوع عضویت", member.optString("membershipType"))
-                    ProfileRow("سطح مشارکت", member.optString("participationRank"))
-                    ProfileRow("وضعیت", member.optString("status"))
-                    ProfileRow("ایمیل", member.optString("email"))
-                    ProfileRow("تلفن", member.optString("phone"))
-                    ProfileRow("امتیاز", member.optInt("points", 0).toString())
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("فعالیت‌ها و رویدادها", style = MaterialTheme.typography.headlineSmall, color = Navy)
+                TextButton(onClick = { scope.launch { refresh() } }) { Text("به‌روزرسانی") }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Navy)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("امتیاز کل فعالیت‌ها", color = Gold, style = MaterialTheme.typography.labelLarge)
+                    Text(member.optInt("points", 0).toString(), color = Color.White, style = MaterialTheme.typography.headlineLarge)
+                    Text("امتیازهای تأییدشده و سوابق حضور از پورتال دریافت می‌شوند.", color = Color.White, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
-        item { Text("باشگاه‌های عضو", style = MaterialTheme.typography.titleLarge, color = Navy) }
-        if (clubs.length() == 0) item { EmptyCard("هنوز عضو باشگاهی نیستید.") }
-        else items(clubs.takeObjects(), key = { it.toString() }) { club ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(
-                        club.optJSONObject("club")?.optString("name").orEmpty()
-                            .ifBlank { club.optString("name") }.ifBlank { "باشگاه" },
-                        color = Navy,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    club.optJSONObject("club")?.optString("description")?.takeIf { it.isNotBlank() }?.let {
-                        Text(it, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        feedback?.let { item { Text(it, color = Color(0xFF2E6B45)) } }
+        failure?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+        if (loading && data.length() == 0) {
+            item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+        } else {
+            item { Text("برنامه‌ها و رویدادهای منتشرشده", style = MaterialTheme.typography.titleLarge, color = Navy) }
+            if (programs.length() == 0) item { EmptyCard("برنامه منتشرشده‌ای برای نمایش وجود ندارد.") }
+            items(programs.takeObjects(), key = { it.optString("id") }) { program ->
+                val id = program.optString("id")
+                val registration = registrations.takeObjects().firstOrNull { it.optString("programId") == id }
+                val isRegistered = registration?.optString("status") == "REGISTERED"
+                val externalUrl = program.optString("registrationUrl")
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text(program.optString("title"), style = MaterialTheme.typography.titleMedium, color = Navy)
+                        program.optString("description").takeIf { it.isNotBlank() }?.let { Text(it) }
+                        program.optString("startsAt").takeIf { it.isNotBlank() }?.let { Text("زمان: ${it.replace("T", " ").take(16)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+                        program.optString("location").takeIf { it.isNotBlank() }?.let { Text("محل برگزاری: $it", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+                        if (externalUrl.isNotBlank()) {
+                            Button(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(externalUrl))) } }, modifier = Modifier.fillMaxWidth()) {
+                                Text("ثبت‌نام / جزئیات در سایت برگزارکننده")
+                            }
+                        } else {
+                            Text(if (isRegistered) "وضعیت: ثبت‌نام شما قطعی شده" else "وضعیت: هنوز ثبت‌نام نکرده‌اید",
+                                style = MaterialTheme.typography.bodySmall, color = if (isRegistered) Color(0xFF2E6B45) else Color.Gray)
+                            Button(enabled = id.isNotBlank() && busyProgramId.isBlank(), onClick = {
+                                scope.launch {
+                                    busyProgramId = id
+                                    feedback = null
+                                    runCatching { if (isRegistered) api.cancelProgramRegistration(id) else api.registerProgram(id) }
+                                        .onSuccess {
+                                            feedback = if (isRegistered) "ثبت‌نام برنامه لغو شد." else "ثبت‌نام شما در برنامه انجام شد."
+                                            refresh()
+                                            onChanged()
+                                        }.onFailure { feedback = it.message ?: "عملیات ثبت‌نام انجام نشد." }
+                                    busyProgramId = ""
+                                }
+                            }, modifier = Modifier.fillMaxWidth()) {
+                                if (busyProgramId == id) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                else Text(if (isRegistered) "لغو ثبت‌نام" else "ثبت‌نام در برنامه")
+                            }
+                        }
+                    }
+                }
+            }
+            item { Text("سوابق ثبت‌نام و حضور", style = MaterialTheme.typography.titleLarge, color = Navy) }
+            if (registrations.length() == 0) item { EmptyCard("هنوز در برنامه‌ای ثبت‌نام نکرده‌اید.") }
+            items(registrations.takeObjects(), key = { it.optString("programId") }) { registration ->
+                val program = registration.optJSONObject("program") ?: JSONObject()
+                val attendedAt = registration.optString("attendedAt")
+                val status = registration.optString("status")
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(program.optString("title").ifBlank { "برنامه" }, color = Navy, style = MaterialTheme.typography.titleMedium)
+                        Text("وضعیت: ${if (attendedAt.isNotBlank()) "حضور ثبت‌شده" else if (status == "CANCELLED") "لغوشده" else if (status == "REGISTERED") "ثبت‌نام‌شده" else status}")
+                        registration.optString("registeredAt").takeIf { it.isNotBlank() }?.let { Text("تاریخ ثبت‌نام: ${it.replace("T", " ").take(16)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+                        if (attendedAt.isNotBlank()) Text("تاریخ حضور: ${attendedAt.replace("T", " ").take(16)}", color = Color(0xFF2E6B45), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            item { Text("فرصت‌های مشارکت و همکاری", style = MaterialTheme.typography.titleLarge, color = Navy) }
+            if (programs.length() == 0) item { EmptyCard("فرصتی برای اعلام علاقه وجود ندارد.") }
+            items(programs.takeObjects(), key = { "interest-${it.optString("id")}" }) { program ->
+                val id = program.optString("id")
+                val interested = interests.takeObjects().any { it.optString("programId") == id && it.optString("status") == "INTERESTED" }
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(program.optString("title"), color = Navy, style = MaterialTheme.typography.titleMedium)
+                        Text("اعلام علاقه به همکاری، ثبت‌نام در رویداد محسوب نمی‌شود.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(enabled = busyProgramId.isBlank(), onClick = {
+                            scope.launch {
+                                busyProgramId = id
+                                feedback = null
+                                runCatching { if (interested) api.withdrawProgramInterest(id) else api.expressProgramInterest(id) }
+                                    .onSuccess {
+                                        feedback = if (interested) "اعلام علاقه لغو شد." else "علاقه‌مندی شما ثبت شد."
+                                        refresh()
+                                        onChanged()
+                                    }.onFailure { feedback = it.message ?: "ثبت علاقه انجام نشد." }
+                                busyProgramId = ""
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (interested) "لغو اعلام علاقه" else "اعلام علاقه به همکاری")
+                        }
+                    }
+                }
+            }
+            item { Text("تاریخچه امتیازها", style = MaterialTheme.typography.titleLarge, color = Navy) }
+            if (pointsHistory.length() == 0) item { EmptyCard("هنوز امتیازی برای محتوای شما ثبت نشده است.") }
+            items(pointsHistory.takeObjects(), key = { it.optString("id") }) { point ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(point.optString("title"), color = Navy, style = MaterialTheme.typography.titleMedium)
+                        Text("+${point.optInt("points")} امتیاز", color = Color(0xFF2E6B45))
+                        point.optString("createdAt").takeIf { it.isNotBlank() }?.let { Text(it.replace("T", " ").take(16), color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            }
+            item { Text("تاریخچه فعالیت", style = MaterialTheme.typography.titleLarge, color = Navy) }
+            if (activities.length() == 0) item { EmptyCard("فعالیتی برای نمایش ثبت نشده است.") }
+            items(activities.takeObjects(), key = { it.optString("id") }) { activity ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(activity.optString("title"), color = Navy, style = MaterialTheme.typography.titleMedium)
+                        activity.optString("description").takeIf { it.isNotBlank() }?.let { Text(it) }
+                        activity.optString("createdAt").takeIf { it.isNotBlank() }?.let { Text(it.replace("T", " ").take(16), color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             }
         }
-        item {
-            Text("باشگاه‌های فعال برای عضویت", style = MaterialTheme.typography.titleLarge, color = Navy)
-            Text("می‌توانید هم‌زمان در چند باشگاه عضو باشید.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-        }
-        if (availableClubs.length() == 0) item { EmptyCard("در حال حاضر باشگاه فعالی برای عضویت وجود ندارد.") }
-        else items(availableClubs.takeObjects(), key = { it.optString("id") }) { club ->
-            val clubId = club.optString("id")
-            val isMember = clubId in activeClubIds
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(club.optString("name", "باشگاه"), color = Navy, style = MaterialTheme.typography.titleMedium)
-                    club.optString("description").takeIf { it.isNotBlank() }?.let { Text(it, color = Color.Gray) }
-                    Button(
-                        onClick = {
+    }
+}
+
+@Composable
+private fun ProfileScreen(api: PortalApi, data: JSONObject, onChanged: () -> Unit) {
+    val member = data.optJSONObject("member") ?: JSONObject()
+    val clubs = member.optJSONArray("clubMemberships") ?: JSONArray()
+    val availableClubs = data.optJSONArray("availableClubs") ?: JSONArray()
+    val invoices = data.optJSONArray("membershipDuesInvoices") ?: JSONArray()
+    val exitRequests = data.optJSONArray("exitRequests") ?: JSONArray()
+    val titleApplications = member.optJSONArray("titleApplications") ?: JSONArray()
+    val paymentGatewayReady = data.optBoolean("paymentGatewayReady")
+    val activeClubIds = clubs.takeObjects()
+        .mapNotNull { item -> item.optJSONObject("club")?.optString("id").orEmpty().ifBlank { item.optString("clubId") }.takeIf { it.isNotBlank() } }
+        .toSet()
+    var joiningClubId by remember { mutableStateOf<String?>(null) }
+    var leavingClubId by remember { mutableStateOf<String?>(null) }
+    var exitBusy by remember { mutableStateOf(false) }
+    var showExitDialog by remember { mutableStateOf(false) }
+    var clubMessage by remember { mutableStateOf<String?>(null) }
+    var clubError by remember { mutableStateOf<String?>(null) }
+    var exitMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)) {
+            item { Text("پرونده عضویت", style = MaterialTheme.typography.headlineSmall, color = Navy) }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ProfileRow("نام و نام خانوادگی", member.optString("fullName"))
+                        ProfileRow("نوع عضویت", member.optString("membershipType"))
+                        ProfileRow("سطح مشارکت", member.optString("participationRank"))
+                        ProfileRow("وضعیت", member.optString("status"))
+                        ProfileRow("ایمیل", member.optString("email"))
+                        ProfileRow("تلفن", member.optString("phone"))
+                        ProfileRow("امتیاز", member.optInt("points", 0).toString())
+                    }
+                }
+            }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text("اعتبارسنجی حرفه‌ای", color = Navy, style = MaterialTheme.typography.titleMedium)
+                        Text("ثبت درخواست، بارگذاری مستندات و پیگیری تعرفه و نتیجه در فرایند رسمی پورتال انجام می‌شود.",
+                            color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                        Button(onClick = {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://portal.khorshid-mafakher.ir/workspace/member/professional-verification"))) }
+                        }, modifier = Modifier.fillMaxWidth()) { Text("ورود به فرایند اعتبارسنجی") }
+                    }
+                }
+            }
+            item { Text("درخواست‌های عنوان حرفه‌ای", style = MaterialTheme.typography.titleLarge, color = Navy) }
+            if (titleApplications.length() == 0) item { EmptyCard("درخواستی برای عنوان حرفه‌ای ثبت نشده است.") }
+            items(titleApplications.takeObjects(5), key = { it.optString("id") }) { application ->
+                val kind = if (application.optString("titleKind") == "ARTIST") "هنرمند" else "متخصص"
+                val status = when (application.optString("status")) {
+                    "SUBMITTED" -> "ثبت‌شده"
+                    "NEEDS_CORRECTION" -> "نیازمند اصلاح"
+                    "APPROVED" -> "تأییدشده"
+                    "REJECTED" -> "ردشده"
+                    else -> application.optString("status")
+                }
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("عنوان $kind", color = Navy, style = MaterialTheme.typography.titleMedium)
+                        Text("وضعیت: $status")
+                        application.optString("reviewReason").takeIf { it.isNotBlank() }?.let { Text(it, color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            }
+            item { Text("باشگاه‌های عضو", style = MaterialTheme.typography.titleLarge, color = Navy) }
+            if (clubs.length() == 0) item { EmptyCard("هنوز عضو باشگاهی نیستید.") }
+            else items(clubs.takeObjects(), key = { it.optJSONObject("club")?.optString("id").orEmpty() }) { membership ->
+                val club = membership.optJSONObject("club") ?: membership
+                val clubId = club.optString("id")
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text(club.optString("name").ifBlank { "باشگاه" }, color = Navy, style = MaterialTheme.typography.titleMedium)
+                        club.optString("description").takeIf { it.isNotBlank() }?.let { Text(it, color = Color.Gray) }
+                        OutlinedButton(enabled = clubId.isNotBlank() && leavingClubId == null, onClick = {
+                            scope.launch {
+                                leavingClubId = clubId
+                                clubMessage = null
+                                clubError = null
+                                runCatching { api.cancelClubMembership(clubId) }
+                                    .onSuccess { clubMessage = "عضویت شما در «${club.optString("name")}» لغو شد."; onChanged() }
+                                    .onFailure { clubError = it.message ?: "لغو عضویت انجام نشد." }
+                                leavingClubId = null
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) {
+                            if (leavingClubId == clubId) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else Text("لغو عضویت در این باشگاه")
+                        }
+                    }
+                }
+            }
+            item {
+                Text("باشگاه‌های فعال برای عضویت", style = MaterialTheme.typography.titleLarge, color = Navy)
+                Text("می‌توانید هم‌زمان در چند باشگاه عضو باشید.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+            }
+            if (availableClubs.length() == 0) item { EmptyCard("در حال حاضر باشگاه فعالی برای عضویت وجود ندارد.") }
+            else items(availableClubs.takeObjects(), key = { it.optString("id") }) { club ->
+                val clubId = club.optString("id")
+                val isMember = clubId in activeClubIds
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(club.optString("name", "باشگاه"), color = Navy, style = MaterialTheme.typography.titleMedium)
+                        club.optString("description").takeIf { it.isNotBlank() }?.let { Text(it, color = Color.Gray) }
+                        Button(onClick = {
                             scope.launch {
                                 joiningClubId = clubId
                                 clubError = null
                                 clubMessage = null
                                 runCatching { api.requestClubMembership(clubId) }
-                                    .onSuccess {
-                                        clubMessage = "عضویت در «${club.optString("name")}» ثبت شد."
-                                        onChanged()
-                                    }
+                                    .onSuccess { clubMessage = "عضویت در «${club.optString("name")}» ثبت شد."; onChanged() }
                                     .onFailure { clubError = it.message ?: "ثبت عضویت ناموفق بود." }
                                 joiningClubId = null
                             }
-                        },
-                        enabled = clubId.isNotBlank() && !isMember && joiningClubId == null,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        when {
-                            isMember -> Text("عضو هستید")
-                            joiningClubId == clubId -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            else -> Text("عضویت در باشگاه")
+                        }, enabled = clubId.isNotBlank() && !isMember && joiningClubId == null, modifier = Modifier.fillMaxWidth()) {
+                            when {
+                                isMember -> Text("عضو هستید")
+                                joiningClubId == clubId -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                else -> Text("عضویت در باشگاه")
+                            }
                         }
                     }
                 }
             }
+            item { Text("سوابق حق عضویت سالانه", style = MaterialTheme.typography.titleLarge, color = Navy) }
+            if (invoices.length() == 0) item { EmptyCard("هنوز صورتحساب حق عضویت برای شما صادر نشده است.") }
+            items(invoices.takeObjects(), key = { it.optString("id") }) { invoice ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        ProfileRow("شماره صورتحساب", invoice.optString("invoiceNumber"))
+                        ProfileRow("مبلغ (تومان)", invoice.optString("amountToman"))
+                        ProfileRow("وضعیت", invoice.optString("status"))
+                        ProfileRow("اعتبار تا", invoice.optString("validUntil"))
+                    }
+                }
+            }
+            item { Text(if (paymentGatewayReady) "درگاه پرداخت فعال است." else "دریافت حق عضویت سالانه در حال حاضر از طریق درگاه آنلاین فعال نشده است.", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
+            item { Text("درخواست خروج از عضویت", style = MaterialTheme.typography.titleLarge, color = Navy) }
+            if (exitRequests.length() > 0) item { Text("آخرین درخواست: ${exitRequests.optJSONObject(0)?.optString("createdAt").orEmpty()}", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
+            item {
+                Text("ثبت این درخواست عضویت را فوراً غیرفعال نمی‌کند؛ درخواست برای بررسی به معاونت اعضا ارسال می‌شود.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                Button(onClick = { showExitDialog = true }, enabled = !exitBusy, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (exitBusy) "در حال ارسال..." else "درخواست خروج از عضویت")
+                }
+                exitMessage?.let { Text(it, color = Color(0xFF2E6B45)) }
+                clubMessage?.let { Text(it, color = Color(0xFF2E6B45)) }
+                clubError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
         }
-        clubMessage?.let { message -> item { Text(message, color = Color(0xFF2E6B45)) } }
-        clubError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+        if (showExitDialog) AlertDialog(
+            onDismissRequest = { if (!exitBusy) showExitDialog = false },
+            title = { Text("درخواست خروج از عضویت") },
+            text = { Text("این اقدام فقط درخواست بررسی خروج را ثبت می‌کند. دسترسی شما با ثبت این درخواست فوراً بسته نمی‌شود. درخواست به معاونت اعضا ارسال خواهد شد.") },
+            confirmButton = {
+                TextButton(enabled = !exitBusy, onClick = {
+                    scope.launch {
+                        exitBusy = true
+                        exitMessage = null
+                        runCatching { api.requestMembershipExit() }
+                            .onSuccess { exitMessage = "درخواست خروج برای معاونت اعضا ارسال شد."; showExitDialog = false; onChanged() }
+                            .onFailure { exitMessage = it.message ?: "ثبت درخواست خروج ناموفق بود." }
+                        exitBusy = false
+                    }
+                }) { Text(if (exitBusy) "در حال ارسال..." else "ثبت درخواست") }
+            },
+            dismissButton = { TextButton(enabled = !exitBusy, onClick = { showExitDialog = false }) { Text("انصراف") } }
+        )
     }
 }
 
